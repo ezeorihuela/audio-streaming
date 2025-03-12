@@ -7,72 +7,49 @@
 </head>
 <body>
     <h1>Transmisión de Audio en Tiempo Real</h1>
-    <label>Selecciona fuente de audio: 
-        <select id="audioSource"></select>
-    </label>
+    <label for="audioSource">Selecciona fuente de audio:</label>
+    <select id="audioSource"></select>
     <button id="start">Iniciar Transmisión</button>
     <button id="stop" disabled>Detener Transmisión</button>
 
     <script>
-        const socket = new WebSocket("wss://audio-streaming.onrender.com");
-
-        socket.onopen = () => {
-            console.log("✅ Conectado al WebSocket en Render");
-        };
-
-        socket.onerror = (error) => {
-            console.error("❌ Error en WebSocket:", error);
-        };
-
-        socket.onclose = () => {
-            console.log("🔴 WebSocket cerrado");
-        };
-
-        const startButton = document.getElementById("start");
-        const stopButton = document.getElementById("stop");
-        const audioSelect = document.getElementById("audioSource");
-
-        navigator.mediaDevices.enumerateDevices().then(devices => {
-            devices.forEach(device => {
-                if (device.kind === "audioinput") {
-                    const option = document.createElement("option");
-                    option.value = device.deviceId;
-                    option.text = device.label || `Micrófono ${audioSelect.length + 1}`;
-                    audioSelect.appendChild(option);
-                }
-            });
-        });
-
-        let mediaStream;
+        const socket = new WebSocket("wss://audio-streaming-jdob.onrender.com");
         let mediaRecorder;
+        
+        async function startStreaming() {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: { deviceId: getSelectedDevice() } });
+            mediaRecorder = new MediaRecorder(stream);
+            mediaRecorder.ondataavailable = event => socket.send(event.data);
+            mediaRecorder.start();
+            document.getElementById("start").disabled = true;
+            document.getElementById("stop").disabled = false;
+        }
 
-        startButton.addEventListener("click", async () => {
-            const constraints = {
-                audio: {
-                    deviceId: audioSelect.value ? { exact: audioSelect.value } : undefined
-                }
-            };
-
-            mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
-            mediaRecorder = new MediaRecorder(mediaStream);
-
-            mediaRecorder.ondataavailable = (event) => {
-                if (socket.readyState === WebSocket.OPEN) {
-                    socket.send(event.data);
-                }
-            };
-
-            mediaRecorder.start(500);
-            startButton.disabled = true;
-            stopButton.disabled = false;
-        });
-
-        stopButton.addEventListener("click", () => {
+        function stopStreaming() {
             mediaRecorder.stop();
-            mediaStream.getTracks().forEach(track => track.stop());
-            startButton.disabled = false;
-            stopButton.disabled = true;
-        });
+            document.getElementById("start").disabled = false;
+            document.getElementById("stop").disabled = true;
+        }
+
+        function getSelectedDevice() {
+            return document.getElementById("audioSource").value;
+        }
+
+        document.getElementById("start").addEventListener("click", startStreaming);
+        document.getElementById("stop").addEventListener("click", stopStreaming);
+
+        async function populateAudioDevices() {
+            const devices = await navigator.mediaDevices.enumerateDevices();
+            const audioSelect = document.getElementById("audioSource");
+            devices.filter(device => device.kind === "audioinput").forEach(device => {
+                const option = document.createElement("option");
+                option.value = device.deviceId;
+                option.text = device.label || `Dispositivo ${audioSelect.length + 1}`;
+                audioSelect.appendChild(option);
+            });
+        }
+
+        populateAudioDevices();
     </script>
 </body>
 </html>

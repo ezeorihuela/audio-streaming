@@ -3,35 +3,45 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Escuchar Transmisión</title>
+    <title>Reproductor de Audio</title>
 </head>
 <body>
-    <h1>Escuchar Transmisión en Vivo</h1>
+    <h1>Reproductor de Transmisión</h1>
     <audio id="audioPlayer" controls></audio>
 
     <script>
-        const socket = new WebSocket("wss://audio-streaming.onrender.com");
-
-        socket.onopen = () => {
-            console.log("✅ Conectado al WebSocket en Render");
-        };
-
-        socket.onerror = (error) => {
-            console.error("❌ Error en WebSocket:", error);
-        };
-
-        socket.onclose = () => {
-            console.log("🔴 WebSocket cerrado");
-        };
-
+        const socket = new WebSocket("wss://audio-streaming-jdob.onrender.com");
         const audioPlayer = document.getElementById("audioPlayer");
-        let audioChunks = [];
+        let audioContext;
+        let source;
+        let bufferQueue = [];
 
-        socket.onmessage = (event) => {
-            audioChunks.push(event.data);
-            const blob = new Blob(audioChunks, { type: "audio/webm" });
-            audioPlayer.src = URL.createObjectURL(blob);
+        socket.onmessage = async (event) => {
+            if (!audioContext) {
+                audioContext = new AudioContext();
+                source = audioContext.createBufferSource();
+                source.connect(audioContext.destination);
+                source.start();
+            }
+            const arrayBuffer = await event.data.arrayBuffer();
+            audioContext.decodeAudioData(arrayBuffer, (buffer) => {
+                bufferQueue.push(buffer);
+                if (bufferQueue.length === 1) {
+                    playBuffer();
+                }
+            });
         };
+
+        function playBuffer() {
+            if (bufferQueue.length > 0) {
+                const buffer = bufferQueue.shift();
+                const bufferSource = audioContext.createBufferSource();
+                bufferSource.buffer = buffer;
+                bufferSource.connect(audioContext.destination);
+                bufferSource.start();
+                bufferSource.onended = playBuffer;
+            }
+        }
     </script>
 </body>
 </html>
