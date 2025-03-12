@@ -1,30 +1,37 @@
 const express = require("express");
-const WebSocket = require("ws");
 const http = require("http");
+const WebSocket = require("ws");
 
 const app = express();
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 
-wss.on("connection", (ws) => {
-    console.log("Cliente conectado");
+app.use(express.static("public"));
 
-    ws.on("message", (message) => {
-        wss.clients.forEach((client) => {
-            if (client !== ws && client.readyState === WebSocket.OPEN) {
+let broadcaster;
+
+wss.on("connection", (socket) => {
+    console.log("Nuevo cliente conectado");
+
+    socket.on("message", (message) => {
+        if (!broadcaster) {
+            broadcaster = socket;
+        }
+
+        // Reenvía el audio a todos los clientes excepto el emisor
+        wss.clients.forEach(client => {
+            if (client !== socket && client.readyState === WebSocket.OPEN) {
                 client.send(message);
             }
         });
     });
 
-    ws.on("close", () => {
-        console.log("Cliente desconectado");
+    socket.on("close", () => {
+        if (socket === broadcaster) {
+            broadcaster = null;
+        }
     });
 });
 
-app.use(express.static("public"));
-
-server.listen(3000, () => {
-    console.log("Servidor corriendo en http://localhost:3000");
-});
-
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, () => console.log(`Servidor corriendo en http://localhost:${PORT}`));

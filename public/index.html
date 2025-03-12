@@ -7,76 +7,58 @@
 </head>
 <body>
     <h1>Transmisión de Audio en Tiempo Real</h1>
-
     <label for="audioSource">Selecciona fuente de audio:</label>
     <select id="audioSource"></select>
-
     <button id="start">Iniciar Transmisión</button>
     <button id="stop" disabled>Detener Transmisión</button>
 
-    <h2>Reproducción en Vivo</h2>
-    <audio id="audioPlayer" controls autoplay></audio>
-
     <script>
-        let ws;
+        const startButton = document.getElementById("start");
+        const stopButton = document.getElementById("stop");
+        const audioSourceSelect = document.getElementById("audioSource");
+
         let mediaRecorder;
-        let selectedDeviceId;
+        let socket;
 
-        async function getAudioDevices() {
-            const devices = await navigator.mediaDevices.enumerateDevices();
-            const audioDevices = devices.filter(device => device.kind === "audioinput");
-            const select = document.getElementById("audioSource");
-
-            audioDevices.forEach(device => {
-                const option = document.createElement("option");
-                option.value = device.deviceId;
-                option.textContent = device.label || `Dispositivo ${select.length + 1}`;
-                select.appendChild(option);
+        // Obtener dispositivos de audio
+        navigator.mediaDevices.enumerateDevices().then(devices => {
+            devices.forEach(device => {
+                if (device.kind === "audioinput") {
+                    const option = document.createElement("option");
+                    option.value = device.deviceId;
+                    option.text = device.label || `Dispositivo ${audioSourceSelect.length + 1}`;
+                    audioSourceSelect.appendChild(option);
+                }
             });
-
-            selectedDeviceId = select.value;
-        }
-
-        document.getElementById("audioSource").addEventListener("change", (event) => {
-            selectedDeviceId = event.target.value;
         });
 
-        document.getElementById("start").addEventListener("click", async () => {
-            ws = new WebSocket("wss://audio-streaming.onrender.com");
-
-            ws.onopen = () => console.log("Conectado al servidor");
-            ws.onmessage = (event) => {
-                let audioBlob = new Blob([event.data], { type: "audio/webm" });
-                let audioUrl = URL.createObjectURL(audioBlob);
-                document.getElementById("audioPlayer").src = audioUrl;
-            };
-
-            let stream = await navigator.mediaDevices.getUserMedia({ 
-                audio: { deviceId: selectedDeviceId ? { exact: selectedDeviceId } : undefined }
+        // Iniciar transmisión
+        startButton.addEventListener("click", async () => {
+            const stream = await navigator.mediaDevices.getUserMedia({
+                audio: { deviceId: audioSourceSelect.value ? { exact: audioSourceSelect.value } : undefined }
             });
 
-            mediaRecorder = new MediaRecorder(stream, { mimeType: "audio/webm" });
+            socket = new WebSocket("wss://audio-streaming.onrender.com");
 
-            mediaRecorder.ondataavailable = (event) => {
-                if (event.data.size > 0 && ws.readyState === WebSocket.OPEN) {
-                    ws.send(event.data);
+            mediaRecorder = new MediaRecorder(stream);
+            mediaRecorder.ondataavailable = event => {
+                if (event.data.size > 0 && socket.readyState === WebSocket.OPEN) {
+                    socket.send(event.data);
                 }
             };
 
-            mediaRecorder.start(500);
-            document.getElementById("start").disabled = true;
-            document.getElementById("stop").disabled = false;
+            mediaRecorder.start(500); // Enviar cada 500ms
+            startButton.disabled = true;
+            stopButton.disabled = false;
         });
 
-        document.getElementById("stop").addEventListener("click", () => {
+        // Detener transmisión
+        stopButton.addEventListener("click", () => {
             mediaRecorder.stop();
-            ws.close();
-            document.getElementById("start").disabled = false;
-            document.getElementById("stop").disabled = true;
+            socket.close();
+            startButton.disabled = false;
+            stopButton.disabled = true;
         });
-
-        getAudioDevices();
     </script>
 </body>
 </html>
-
