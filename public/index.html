@@ -1,50 +1,58 @@
-<!DOCTYPE html>
-<html lang="es">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Transmisión de Audio</title>
-</head>
-<body>
-    <h1>Transmisión de Audio en Tiempo Real</h1>
-    <label for="audioSource">Selecciona fuente de audio:</label>
-    <select id="audioSource"></select>
-    <button id="start">Iniciar Transmisión</button>
-    <button id="stop" disabled>Detener Transmisión</button>
-    <script>
+<script>
+    document.addEventListener("DOMContentLoaded", async () => {
         const startButton = document.getElementById("start");
         const stopButton = document.getElementById("stop");
-        const audioSelect = document.getElementById("audioSource");
-        let socket, mediaRecorder;
+        const audioSourceSelect = document.getElementById("audioSource");
+        let ws = null;
 
-        navigator.mediaDevices.enumerateDevices().then(devices => {
-            devices.forEach(device => {
-                if (device.kind === "audioinput") {
-                    let option = document.createElement("option");
-                    option.value = device.deviceId;
-                    option.text = device.label || `Micrófono ${audioSelect.length + 1}`;
-                    audioSelect.appendChild(option);
-                }
+        async function getAudioDevices() {
+            const devices = await navigator.mediaDevices.enumerateDevices();
+            const audioDevices = devices.filter(device => device.kind === "audioinput");
+
+            audioDevices.forEach(device => {
+                const option = document.createElement("option");
+                option.value = device.deviceId;
+                option.text = device.label || `Micrófono ${audioSourceSelect.length + 1}`;
+                audioSourceSelect.appendChild(option);
             });
+
+            if (audioDevices.length > 0) {
+                startButton.disabled = false;
+            }
+        }
+
+        startButton.addEventListener("click", async () => {
+            if (ws && ws.readyState !== WebSocket.CLOSED) {
+                console.log("WebSocket ya está activo.");
+                return;
+            }
+
+            ws = new WebSocket("wss://audio-streaming-jdob.onrender.com");
+
+            ws.onopen = () => {
+                console.log("WebSocket conectado.");
+            };
+
+            ws.onmessage = (event) => {
+                console.log("Mensaje recibido:", event.data);
+            };
+
+            ws.onerror = (error) => {
+                console.error("Error en WebSocket:", error);
+            };
+
+            ws.onclose = () => {
+                console.log("WebSocket cerrado.");
+            };
         });
 
-        startButton.onclick = () => {
-            navigator.mediaDevices.getUserMedia({ audio: { deviceId: audioSelect.value } }).then(stream => {
-                socket = new WebSocket("wss://audio-streaming-jdob.onrender.com");
-                mediaRecorder = new MediaRecorder(stream);
-                mediaRecorder.ondataavailable = event => socket.send(event.data);
-                mediaRecorder.start(1000);
-                stopButton.disabled = false;
-                startButton.disabled = true;
-            });
-        };
+        stopButton.addEventListener("click", () => {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.close();
+                console.log("WebSocket cerrado por el usuario.");
+            }
+        });
 
-        stopButton.onclick = () => {
-            mediaRecorder.stop();
-            socket.close();
-            stopButton.disabled = true;
-            startButton.disabled = false;
-        };
-    </script>
-</body>
-</html>
+        await getAudioDevices();
+    });
+</script>
