@@ -18,7 +18,6 @@ wss.on("connection", (socket) => {
             broadcaster = socket;
         }
 
-        // Reenvía el audio a todos los clientes excepto el emisor
         wss.clients.forEach(client => {
             if (client !== socket && client.readyState === WebSocket.OPEN) {
                 client.send(message);
@@ -33,5 +32,6 @@ wss.on("connection", (socket) => {
     });
 });
 
+// Asegurar que Render usa el puerto correcto
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => console.log(`Servidor corriendo en http://localhost:${PORT}`));
+server.listen(PORT, () => console.log(`Servidor corriendo en https://audio-streaming.onrender.com`));

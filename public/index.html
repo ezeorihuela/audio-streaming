@@ -7,55 +7,69 @@
 </head>
 <body>
     <h1>Transmisión de Audio en Tiempo Real</h1>
-    <label for="audioSource">Selecciona fuente de audio:</label>
-    <select id="audioSource"></select>
+    <label>Selecciona fuente de audio: 
+        <select id="audioSource"></select>
+    </label>
     <button id="start">Iniciar Transmisión</button>
     <button id="stop" disabled>Detener Transmisión</button>
 
     <script>
+        const socket = new WebSocket("wss://audio-streaming.onrender.com");
+
+        socket.onopen = () => {
+            console.log("✅ Conectado al WebSocket en Render");
+        };
+
+        socket.onerror = (error) => {
+            console.error("❌ Error en WebSocket:", error);
+        };
+
+        socket.onclose = () => {
+            console.log("🔴 WebSocket cerrado");
+        };
+
         const startButton = document.getElementById("start");
         const stopButton = document.getElementById("stop");
-        const audioSourceSelect = document.getElementById("audioSource");
+        const audioSelect = document.getElementById("audioSource");
 
-        let mediaRecorder;
-        let socket;
-
-        // Obtener dispositivos de audio
         navigator.mediaDevices.enumerateDevices().then(devices => {
             devices.forEach(device => {
                 if (device.kind === "audioinput") {
                     const option = document.createElement("option");
                     option.value = device.deviceId;
-                    option.text = device.label || `Dispositivo ${audioSourceSelect.length + 1}`;
-                    audioSourceSelect.appendChild(option);
+                    option.text = device.label || `Micrófono ${audioSelect.length + 1}`;
+                    audioSelect.appendChild(option);
                 }
             });
         });
 
-        // Iniciar transmisión
+        let mediaStream;
+        let mediaRecorder;
+
         startButton.addEventListener("click", async () => {
-            const stream = await navigator.mediaDevices.getUserMedia({
-                audio: { deviceId: audioSourceSelect.value ? { exact: audioSourceSelect.value } : undefined }
-            });
+            const constraints = {
+                audio: {
+                    deviceId: audioSelect.value ? { exact: audioSelect.value } : undefined
+                }
+            };
 
-            socket = new WebSocket("wss://audio-streaming.onrender.com");
+            mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
+            mediaRecorder = new MediaRecorder(mediaStream);
 
-            mediaRecorder = new MediaRecorder(stream);
-            mediaRecorder.ondataavailable = event => {
-                if (event.data.size > 0 && socket.readyState === WebSocket.OPEN) {
+            mediaRecorder.ondataavailable = (event) => {
+                if (socket.readyState === WebSocket.OPEN) {
                     socket.send(event.data);
                 }
             };
 
-            mediaRecorder.start(500); // Enviar cada 500ms
+            mediaRecorder.start(500);
             startButton.disabled = true;
             stopButton.disabled = false;
         });
 
-        // Detener transmisión
         stopButton.addEventListener("click", () => {
             mediaRecorder.stop();
-            socket.close();
+            mediaStream.getTracks().forEach(track => track.stop());
             startButton.disabled = false;
             stopButton.disabled = true;
         });
