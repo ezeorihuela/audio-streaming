@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Transmisión de Audio</title>
+</head>
+<body>
+    <h1>Transmisión de Audio en Tiempo Real</h1>
+
+    <label for="audioSource">Selecciona fuente de audio:</label>
+    <select id="audioSource"></select>
+
+    <button id="start">Iniciar Transmisión</button>
+    <button id="stop" disabled>Detener Transmisión</button>
+
+    <h2>Reproducción en Vivo</h2>
+    <audio id="audioPlayer" controls autoplay></audio>
+
+    <script>
+        let ws;
+        let mediaRecorder;
+        let selectedDeviceId;
+
+        async function getAudioDevices() {
+            const devices = await navigator.mediaDevices.enumerateDevices();
+            const audioDevices = devices.filter(device => device.kind === "audioinput");
+            const select = document.getElementById("audioSource");
+
+            audioDevices.forEach(device => {
+                const option = document.createElement("option");
+                option.value = device.deviceId;
+                option.textContent = device.label || `Dispositivo ${select.length + 1}`;
+                select.appendChild(option);
+            });
+
+            selectedDeviceId = select.value;
+        }
+
+        document.getElementById("audioSource").addEventListener("change", (event) => {
+            selectedDeviceId = event.target.value;
+        });
+
+        document.getElementById("start").addEventListener("click", async () => {
+            ws = new WebSocket("wss://audio-streaming.onrender.com");
+
+            ws.onopen = () => console.log("Conectado al servidor");
+            ws.onmessage = (event) => {
+                let audioBlob = new Blob([event.data], { type: "audio/webm" });
+                let audioUrl = URL.createObjectURL(audioBlob);
+                document.getElementById("audioPlayer").src = audioUrl;
+            };
+
+            let stream = await navigator.mediaDevices.getUserMedia({ 
+                audio: { deviceId: selectedDeviceId ? { exact: selectedDeviceId } : undefined }
+            });
+
+            mediaRecorder = new MediaRecorder(stream, { mimeType: "audio/webm" });
+
+            mediaRecorder.ondataavailable = (event) => {
+                if (event.data.size > 0 && ws.readyState === WebSocket.OPEN) {
+                    ws.send(event.data);
+                }
+            };
+
+            mediaRecorder.start(500);
+            document.getElementById("start").disabled = true;
+            document.getElementById("stop").disabled = false;
+        });
+
+        document.getElementById("stop").addEventListener("click", () => {
+            mediaRecorder.stop();
+            ws.close();
+            document.getElementById("start").disabled = false;
+            document.getElementById("stop").disabled = true;
+        });
+
+        getAudioDevices();
+    </script>
+</body>
+</html>
+
